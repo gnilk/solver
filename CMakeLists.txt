@@ -54,6 +54,8 @@ if (APPLE)
     message(STATUS ${CMAKE_OSX_ARCHITECTURES})
     find_library(IOKIT_FRAMEWORK IOKit)
     find_library(CORE_FRAMEWORK CoreFoundation)
+
+   target_include_directories(solverlib PRIVATE /usr/local/include)
    
     list(APPEND libdep ${COCOA_FRAMEWORK} ${IOKIT_FRAMEWORK})
 endif()
