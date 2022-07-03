@@ -3,7 +3,10 @@
 #
 cmake_minimum_required(VERSION 2.8)
 
-project(solver)
+project(solve)
+
+set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "")
+#set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "")
 
 set(CMAKE_SOURCE_DIR ./src)
 set(CMAKE_BINARY_DIR ./bin)
@@ -26,9 +29,9 @@ list(APPEND tests tests/test_expsolver.cpp)
 #
 # solver
 #
-add_executable(solver src/solver.cpp ${src})
-target_include_directories(solver PRIVATE .)
-set_property(TARGET solver PROPERTY CXX_STANDARD 11)
+add_executable(solve src/solver.cpp ${src})
+target_include_directories(solve PRIVATE .)
+set_property(TARGET solve PROPERTY CXX_STANDARD 11)
 
 #
 # Unit test runner (see: https://github.com/gnilk/testrunner )
@@ -48,7 +51,7 @@ set_property(TARGET solverlib PROPERTY CXX_STANDARD 11)
 
 
 if (APPLE)
-    set(CMAKE_OSX_ARCHITECTURES x86_64)
+    #set(CMAKE_OSX_ARCHITECTURES x86_64)
     set(CMAKE_OSX_SYSROOT /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk)
 
     message(STATUS ${CMAKE_OSX_ARCHITECTURES})
@@ -61,13 +64,13 @@ if (APPLE)
 endif()
 
 # link the stuff
-target_link_libraries(solver ${libdep})
+target_link_libraries(solve ${libdep})
 target_link_libraries(solverlib ${libdep})
 
 # on Linux, support "sudo make install"
 if (UNIX)
     include(GNUInstallDirs)
-    install(TARGETS solver RUNTIME DESTINATION bin)
+    install(TARGETS solve RUNTIME DESTINATION bin)
 endif()
 
 #

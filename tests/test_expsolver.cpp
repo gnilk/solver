@@ -120,6 +120,7 @@ int test_expsolver_ifop(ITesting *t) {
     }
 
     // Should not work
+    printf("NOTE: Errors Expected\n");
 	if (ExpSolver::Solve(&tmp, "4<1?3*2+1")) {
         return kTR_Fail;
 	}
