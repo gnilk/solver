@@ -250,7 +250,7 @@ double IfOperatorNode::Evaluate()
 ExpSolver::ExpSolver(const char *expression)
 {
 	//this->expression = strdup(expression);
-	tokenizer = new Tokenizer(expression,"*/+-(),<>?:");
+	tokenizer = new Tokenizer(expression," * / + - ( ) , < > ? :");
 	pVariableCallback = NULL;
 	pFuncCallback = NULL;
 	tree = NULL;

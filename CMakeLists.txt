@@ -24,6 +24,7 @@ list(APPEND src src/expsolver.cpp src/tokenizer.cpp)
 
 # tests
 list(APPEND tests tests/test_expsolver.cpp)
+list(APPEND tests tests/test_tokenizer.cpp)
 
 
 #
@@ -78,7 +79,6 @@ endif()
 #
 add_custom_target(
         tests ALL
-        COMMAND ${TRUN_CMD}
         DEPENDS solverlib
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
