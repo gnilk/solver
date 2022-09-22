@@ -117,7 +117,8 @@ namespace gnilk
 		BaseNode *BuildUserCall();
 		BaseNode *BuildTerm();
 		BaseNode *BuildFact();
-		BaseNode *BuildBase();
+		BaseNode *BuildAddSub();
+        BaseNode *BuildShift();
 		BaseNode *BuildBool();
 		BaseNode *BuildIf();
 		BaseNode *BuildTree();

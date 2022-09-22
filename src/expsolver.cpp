@@ -6,18 +6,20 @@ Orginal : 2009-10-17, 15:50
 Descr   : Simple expression solver, 2 pass (build tree, solve tree) 
 	  handles user callbacks for variables and function call's
 
+
 Modified: $Date: $ by $Author: FKling $
 ---------------------------------------------------------------------------
 TODO: [ -:Not done, +:In progress, !:Completed]
 <pre>
  ! implement negative numbers 
  ! Multiple function arguments
- - '?' plus comparative operators
- + '>' and '<' in progress
+ ! '?' plus comparative operators
+ ! '>' and '<' in progress
 </pre>
 
 
 \History
+- 22.09.22, FKling, Added support for '<<' and '>>'
 - 04.08.14, FKling, Fixed bug related to priority of expressions and functions
                     Added multiple function arguments
                     Support for nested function calls
@@ -185,13 +187,27 @@ BinOpNode::~BinOpNode()
 
 double BinOpNode::Evaluate()
 {
-	switch(op[0])
-	{
-	case '+' : return pLeft->Evaluate() + pRight->Evaluate();
-	case '-' : return pLeft->Evaluate() - pRight->Evaluate();
-	case '*' : return pLeft->Evaluate() * pRight->Evaluate();
-	case '/' : return pLeft->Evaluate() / pRight->Evaluate();
-	}
+    switch(Tokenizer::Case(op, "<< >> + - * /")) {
+        case 0 : // <<
+            return (int)pLeft->Evaluate() << (int)pRight->Evaluate();
+        case 1 : // >>
+            return (int)pLeft->Evaluate() >> (int)pRight->Evaluate();
+        case 2 : // +
+            return pLeft->Evaluate() + pRight->Evaluate();
+        case 3 : // -
+            return pLeft->Evaluate() - pRight->Evaluate();
+        case 4 : // *
+            return pLeft->Evaluate() * pRight->Evaluate();
+        case 5 : // /
+            return pLeft->Evaluate() / pRight->Evaluate();
+    }
+//	switch(op[0])
+//	{
+//	case '+' : return pLeft->Evaluate() + pRight->Evaluate();
+//	case '-' : return pLeft->Evaluate() - pRight->Evaluate();
+//	case '*' : return pLeft->Evaluate() * pRight->Evaluate();
+//	case '/' : return pLeft->Evaluate() / pRight->Evaluate();
+//	}
 	printf("[!] Illegal operator: %s\n",op);
 	return 0.0;
 }
@@ -250,7 +266,7 @@ double IfOperatorNode::Evaluate()
 ExpSolver::ExpSolver(const char *expression)
 {
 	//this->expression = strdup(expression);
-	tokenizer = new Tokenizer(expression," * / + - ( ) , < > ? :");
+	tokenizer = new Tokenizer(expression,"<< >> * / + - ( ) , < > ? :");
 	pVariableCallback = NULL;
 	pFuncCallback = NULL;
 	tree = NULL;
@@ -466,12 +482,11 @@ BaseNode *ExpSolver::BuildTerm()
 	}
 	return exp;
 }
-
-// 
+//
 // internal, builds the expression tree
 // handles low priority operators - also called internally
 //
-BaseNode *ExpSolver::BuildBase()
+BaseNode *ExpSolver::BuildAddSub()
 {
 	BaseNode *exp;
 	exp = BuildTerm();
@@ -488,10 +503,33 @@ BaseNode *ExpSolver::BuildBase()
 	}
 	return exp;
 }
+
+
+//
+// Build shift ('<<' or '>>') nodes
+//
+BaseNode *ExpSolver::BuildShift() {
+    BaseNode *exp;
+    exp = BuildAddSub();
+    if (tokenizer->HasMore()) {
+        const char *token = tokenizer->Peek();
+        while((token != nullptr) && (Tokenizer::Case(token, "<< >>")  != -1)) {
+            token = tokenizer->Next();
+            BaseNode *nextAddSub = BuildAddSub();
+            exp = new BinOpNode(token, exp, nextAddSub);
+            token = tokenizer->Peek();
+        }
+    }
+    return exp;
+}
+
+
+
+
 BaseNode *ExpSolver::BuildBool() 
 {
 	BaseNode *exp;
-	exp = BuildBase();
+	exp = BuildShift();
 	if (tokenizer->HasMore())
 	{
 		const char *token = tokenizer->Peek();
@@ -500,7 +538,7 @@ BaseNode *ExpSolver::BuildBool()
 		{
 			token = tokenizer->Next();
 			//printf("BuildBool, Next as BuildBase\n");
-			BaseNode *nextBase = BuildBase();
+			BaseNode *nextBase = BuildShift();
 			exp = new BoolOpNode(token, exp, nextBase);
 			token = tokenizer->Peek();
 			//printf("BuildBool, done, next token=%s\n",token);

@@ -11,7 +11,9 @@ extern "C" {
     int test_expsolver_variables(ITesting *t);
     int test_expsolver_booleans(ITesting *t);
     int test_expsolver_ifop(ITesting *t);
-
+    int test_expsolver_simple(ITesting *t);
+    int test_expsolver_lshift(ITesting *t);
+    int test_expsolver_rshift(ITesting *t);
 }
 
 
@@ -140,7 +142,24 @@ int test_expsolver_simple(ITesting *t) {
         return kTR_Fail;
     }
     return kTR_Pass;
+}
 
+int test_expsolver_lshift(ITesting *t) {
+    double tmp;
+    if (!ExpSolver::Solve(&tmp, "1<<4")) {
+        return kTR_Fail;
+    }
+    TR_ASSERT(t, tmp == 1<<4);
+    return kTR_Pass;
+}
+
+int test_expsolver_rshift(ITesting *t) {
+    double tmp;
+    if (!ExpSolver::Solve(&tmp, "8>>2")) {
+        return kTR_Fail;
+    }
+    TR_ASSERT(t, tmp==2);
+    return kTR_Pass;
 }
 
 // static void testExpSolver() {

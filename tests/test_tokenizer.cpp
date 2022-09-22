@@ -16,6 +16,7 @@ extern "C" {
     DLL_EXPORT int test_tokenizer(ITesting *t);
     DLL_EXPORT int test_tokenizer_single(ITesting *t);
     DLL_EXPORT int test_tokenizer_multi(ITesting *t);
+    DLL_EXPORT int test_tokenizer_peek(ITesting *t);
 }
 int test_tokenizer(ITesting *t) {
     return kTR_Pass;
@@ -54,4 +55,17 @@ int test_tokenizer_multi(ITesting *t) {
     return kTR_Pass;
 }
 
+int test_tokenizer_peek(ITesting *t) {
+    const char *expression = "4<<2";
+    auto tokenizer = new Tokenizer(expression,"<< >> * / + - ( ) , < > ? :");
+
+    auto next = tokenizer->Next();
+    TR_ASSERT(t, !strcmp(next, "4"));
+    auto peek = tokenizer->Peek();
+    TR_ASSERT(t, !strcmp(peek, "<<"));
+
+
+
+    return kTR_Pass;
+}
 
