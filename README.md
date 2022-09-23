@@ -1,6 +1,8 @@
 # Solver
 Simple expression solver. Use it as a library or as a command line tool.
 
+NOTE: In order to build and run unit tests you need: https://github.com/gnilk/testrunner
+
 ## Build
 1. Clone the repository
 2. From the cloned repository, create a build directory: `mkdir bld/`
