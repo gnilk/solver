@@ -22,14 +22,14 @@ namespace gnilk
 
 	class BaseNode {
 	public:
-		virtual ~BaseNode();
+		virtual ~BaseNode() = default;
 		virtual double Evaluate() = 0;
 	};
 
 	class ConstNode : public BaseNode {
 	public:
 		ConstNode(const char *input, bool negative);
-		virtual ~ConstNode();
+		virtual ~ConstNode() = default;
 		double Evaluate();
     protected:
         double numeric;

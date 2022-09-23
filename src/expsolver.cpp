@@ -71,9 +71,6 @@ static unsigned long bin2dec(const char *binary) {
 }
 
 
-BaseNode::~BaseNode() {
-    // nothing
-}
 
 ConstNode::ConstNode(const char *input, bool negative) {
     if ((input[0] == '$') || (input[0] == 'x')) {
@@ -89,10 +86,6 @@ ConstNode::ConstNode(const char *input, bool negative) {
     if (negative) {
         numeric *= -1;
     }
-}
-
-ConstNode::~ConstNode() {
-    // nothing
 }
 
 double ConstNode::Evaluate() {
@@ -172,6 +165,7 @@ BinOpNode::~BinOpNode() {
 }
 
 double BinOpNode::Evaluate() {
+    // 'Case' returns zero-based index from input or -1 if not found
     switch (Tokenizer::Case(op, "<< >> + - * /")) {
         case 0 : // <<
             return (int) pLeft->Evaluate() << (int) pRight->Evaluate();
@@ -186,13 +180,7 @@ double BinOpNode::Evaluate() {
         case 5 : // /
             return pLeft->Evaluate() / pRight->Evaluate();
     }
-//	switch(op[0])
-//	{
-//	case '+' : return pLeft->Evaluate() + pRight->Evaluate();
-//	case '-' : return pLeft->Evaluate() - pRight->Evaluate();
-//	case '*' : return pLeft->Evaluate() * pRight->Evaluate();
-//	case '/' : return pLeft->Evaluate() / pRight->Evaluate();
-//	}
+
     printf("[!] Illegal operator: %s\n", op);
     return 0.0;
 }
@@ -209,6 +197,8 @@ BoolOpNode::~BoolOpNode() {
 
 double BoolOpNode::Evaluate() {
     //printf("BoolOpNode: %c\n",op[0]);
+
+    // FIXME: replace with Tokenizer::Case and replace '=' with '=='
     switch (op[0]) {
         case '>' :
             return pLeft->Evaluate() > (int) pRight->Evaluate();
@@ -367,13 +357,18 @@ BaseNode *ExpSolver::BuildUserCall() {
 //
 BaseNode *ExpSolver::BuildFact() {
     BaseNode *exp = nullptr;
-    if (!tokenizer->HasMore()) return nullptr;
+    if (!tokenizer->HasMore()) {
+        return nullptr;
+    }
+
     kTokenClass tc = kTokenClass_Unknown;
     const char *token = tokenizer->Peek();
+
     // classify next
     if (token[0] == '(')    // Start of new expression, ok, build tree..
     {
-        token = tokenizer->Next();
+        // Swallow peek...
+        tokenizer->Next();
 
         exp = BuildTree();
 
@@ -405,7 +400,7 @@ BaseNode *ExpSolver::BuildFact() {
                 exp = new ConstNode(token, negative);
 
             }
-                break;
+            break;
             case kTokenClass_Variable :
                 exp = BuildUserCall();
                 break;
