@@ -8,17 +8,16 @@
 namespace gnilk
 {
 
-	class Tokenizer
-	{
+	class Tokenizer {
 	public:
 		explicit Tokenizer(const char *sInput);
 		Tokenizer(const char *sInput, const char *sOperators);
 		virtual ~Tokenizer() = default;
 
-		bool HasMore();
+		bool HasMore() const;
 		const char *Previous();
 		const char *Next();
-		const char *Peek();
+		const char *Peek() const;
 
 		static int Case(const char *sValue, const char *sInput);
 

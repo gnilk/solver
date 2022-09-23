@@ -40,9 +40,11 @@ static char *num2bin(unsigned int num, char *buffer, int maxlen) {
         if (bit != 0) break;
     }
 
+    memset(buffer,0, maxlen);
+
     buffer[idxStart]='0';
     idxStart++;
-    int bitCount = 0;
+
     for(;i>=0;i--) {
         buffer[idxStart] = (num & (1<<i))?'1':'0';
         idxStart++;

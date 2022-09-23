@@ -1,19 +1,24 @@
 #
 # CMAKE file for Solver
 #
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.16)
 
 project(solve)
 
-set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "")
+if (APPLE)
+    set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "")
+    set(CMAKE_OSX_SYSROOT /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk)
+endif()
+
 #set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "")
 
 set(CMAKE_SOURCE_DIR ./src)
 set(CMAKE_BINARY_DIR ./bin)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 set(LIBRARY_OUTPUT_PATH ./lib)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} /usr/local/lib)
+
+#set(CMAKE_CXX_STANDARD_REQUIRED ON)
+#set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} /usr/local/lib)
 
 set(CMAKE_BUILD_TYPE Debug)
 
@@ -52,8 +57,7 @@ set_property(TARGET solverlib PROPERTY CXX_STANDARD 11)
 
 
 if (APPLE)
-    #set(CMAKE_OSX_ARCHITECTURES x86_64)
-    set(CMAKE_OSX_SYSROOT /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk)
+    target_compile_options(solve PUBLIC -Wall -Wpedantic -Wextra)
 
     message(STATUS ${CMAKE_OSX_ARCHITECTURES})
     find_library(IOKIT_FRAMEWORK IOKit)
@@ -62,13 +66,18 @@ if (APPLE)
    target_include_directories(solverlib PRIVATE /usr/local/include)
    
     list(APPEND libdep ${COCOA_FRAMEWORK} ${IOKIT_FRAMEWORK})
+elseif(UNIX)
+    target_compile_options(solve PUBLIC -Wall -Wpedantic -Wextra)
 endif()
 
 # link the stuff
 target_link_libraries(solve ${libdep})
 target_link_libraries(solverlib ${libdep})
 
-# on Linux, support "sudo make install"
+#
+# Installation handling
+#
+# on Linux/macOS, support "sudo make install"
 if (UNIX)
     include(GNUInstallDirs)
     install(TARGETS solve RUNTIME DESTINATION bin)

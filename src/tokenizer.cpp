@@ -4,20 +4,13 @@ Author  : $Author: FKling $
 Version : $Revision: 1 $
 Orginal : 2009-10-17, 15:50
 Descr   : Simple and extensible line tokenzier, pre-processes the data 
-	  and stores tokens in a list.
+	      and stores tokens in a list.
 
 Modified: $Date: $ by $Author: FKling $
 ---------------------------------------------------------------------------
-TODO: [ -:Not done, +:In progress, !:Completed]
-<pre>
- - Block comments
- - Extend to handle multi line
- - Line comments
- - Multi character operators
-</pre>
-
 
 \History
+- 23.09.22, FKling, Multi char operators
 - 14.03.14, FKling, published on github
 - 25.10.09, FKling, Implementation
 
@@ -44,24 +37,24 @@ Tokenizer::Tokenizer(const char *sInput) {
     PrepareTokens(sInput);
 }
 
-bool Tokenizer::HasMore() {
+bool Tokenizer::HasMore() const {
     return (iTokenIndex < tokens.size());
 
 }
 
 const char *Tokenizer::Next() {
-    if (iTokenIndex > tokens.size()) return NULL;
+    if (iTokenIndex > tokens.size()) return nullptr;
     return tokens[iTokenIndex++].c_str();
 }
 
 const char *Tokenizer::Previous() {
     if (iTokenIndex > 0) return tokens[--iTokenIndex].c_str();
-    return NULL;
+    return nullptr;
 }
 
-const char *Tokenizer::Peek() {
+const char *Tokenizer::Peek() const {
     if (iTokenIndex < tokens.size()) return tokens[iTokenIndex].c_str();
-    return NULL;
+    return nullptr;
 }
 
 int Tokenizer::Case(const char *sValue, const char *sInput) {
@@ -75,20 +68,6 @@ int Tokenizer::Case(const char *sValue, const char *sInput) {
     return -1;
 }
 
-
-//
-//bool Tokenizer::IsOperator(char input) {
-//    for (auto s: operators) {
-//        if (s.at(0) == input) {
-//            return true;
-//        }
-//    }
-//    return false;
-//
-////	if (strchr(operators,input)) return true;
-//////	if (Tokenizer::Case((const char*)input, operators) != -1) return true;
-////	return false;
-//}
 
 bool Tokenizer::IsOperator(const char *input, int &outSzOperator) {
     for (auto s: operators) {
@@ -133,6 +112,14 @@ char *Tokenizer::GetNextToken(char *dst, int nMax, char **input) {
     } else {
         while (!isspace(**input) && !IsOperator(*input, szOperator) && (**input != '\0')) {
             dst[i++] = **input;
+
+            // This is a developer problem, ergo - safe to exit..
+            if (i >= nMax) {
+                fprintf(stderr, "ERR: GetNextToken, token size larger than buffer (>nMax)\n");
+                exit(1);
+            }
+
+
             (*input)++;
         }
     }
@@ -148,6 +135,13 @@ char *Tokenizer::GetNextTokenNoOperator(char *dst, int nMax, char **input) {
     int i = 0;
     while (!isspace(**input) && (**input != '\0')) {
         dst[i++] = **input;
+
+        // This is a developer problem, ergo - safe to exit..
+        if (i >= nMax) {
+            fprintf(stderr, "ERR: GetNextToken, token size larger than buffer (>nMax)\n");
+            exit(1);
+        }
+
         (*input)++;
     }
     dst[i] = '\0';
