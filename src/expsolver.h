@@ -100,8 +100,8 @@ namespace gnilk
         static bool Solve(double *out, const char *expression);
     protected:
         BaseNode *BuildUserCall();
-        BaseNode *BuildTerm();
-        BaseNode *BuildFact();
+        BaseNode *BuildSubExpr();
+        BaseNode *BuildMulDiv();
         BaseNode *BuildAddSub();
         BaseNode *BuildShift();
         BaseNode *BuildBool();

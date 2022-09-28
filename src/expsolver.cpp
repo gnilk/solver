@@ -43,34 +43,347 @@ TODO: [ -:Not done, +:In progress, !:Completed]
 
 using namespace gnilk;
 
-static unsigned long long hex2dec_c(const char *s) {
-    unsigned long long n = 0;
-    int length = strlen(s);
-    for (int i = 0; i < length && s[i] != '\0'; i++) {
-        int v = 0;
-        if ('a' <= s[i] && s[i] <= 'f') { v = s[i] - 97 + 10; }
-        else if ('A' <= s[i] && s[i] <= 'F') { v = s[i] - 65 + 10; }
-        else if ('0' <= s[i] && s[i] <= '9') { v = s[i] - 48; }
-        else break;
-        n *= 16;
-        n += v;
+// Local helpers, forward declaration
+static unsigned long long hex2dec_c(const char *s);
+static unsigned long bin2dec(const char *binary);
+
+
+//
+// constructor
+//
+ExpSolver::ExpSolver(const char *expression) {
+    //this->expression = strdup(expression);
+    tokenizer = new Tokenizer(expression, "<< >> * / + - ( ) , < > ? :");
+    pVariableCallback = nullptr;
+    pFuncCallback = nullptr;
+    tree = nullptr;
+}
+
+bool ExpSolver::Solve(double *out, const char *expression) {
+    ExpSolver solver(expression);
+    if (!solver.Prepare()) return false;
+    *out = solver.Evaluate();
+    return true;
+}
+
+ExpSolver::~ExpSolver() {
+    delete tokenizer;
+    if (tree != nullptr) {
+        delete tree;
     }
-    return n;
 }
 
-static unsigned long bin2dec(const char *binary) {
-    int len, i, exp;
-    unsigned long dec = 0;
+//
+// registration of variable handling
+//
+void ExpSolver::RegisterUserVariableCallback(PFNEVALUATE pFunc, void *pUser) {
+    pVariableCallback = pFunc;
+    pVariableContext = pUser;
+}
 
-    len = strlen(binary);
-    exp = len - 1;
+//
+// registration of function callback's
+//
+void ExpSolver::RegisterUserFunctionCallback(PFNEVALUATEFUNC pFunc, void *pUser) {
+    pFuncCallback = pFunc;
+    pFunctionContext = pUser;
+}
 
-    for (i = 0; i < len; i++, exp--)
-        dec += binary[i] == '1' ? pow(2, exp) : 0;
-    return dec;
+//
+// determines if a char is a numerical token or not
+//
+static bool IsNumeric(char c) {
+    static const char *num = "-0123456789%$x";
+    if (!strchr(num, c)) return false;
+    return true;
+}
+
+//
+// Classification of a token when building factors
+//
+ExpSolver::kTokenClass ExpSolver::ClassifyToken(const char *token) {
+    kTokenClass result = kTokenClass_Unknown;
+    if (IsNumeric(token[0])) {
+        result = kTokenClass_Numeric;
+    } else {
+        result = kTokenClass_Variable;
+    }
+    return result;
+}
+
+//
+// user function calls and variables
+//
+BaseNode *ExpSolver::BuildUserCall() {
+    BaseNode *exp = nullptr;
+    BaseNode *arg = nullptr;
+    int argcounter = 0;
+    BaseNode *funcargs[EXP_SOLVER_MAX_ARGS];
+
+
+    const char *token = tokenizer->Next();
+
+    const char *next = tokenizer->Peek();
+    if ((next != nullptr) && (next[0] == '(')) {
+        next = tokenizer->Next();
+
+        // Assume arguments to function call..
+        arg = BuildTree();
+
+        // nullptr == Empty expression - i.e. no parameters to function call
+        if (arg != nullptr) {
+            funcargs[argcounter++] = arg;
+        }
+        next = tokenizer->Peek();
+
+        // Parse additional arguments
+        while (next[0] == ',') {
+            tokenizer->Next();
+            arg = BuildTree();
+            funcargs[argcounter++] = arg;
+            next = tokenizer->Peek();
+        }
+
+        if (next[0] == ')') {
+            tokenizer->Next();
+            if (pFuncCallback != nullptr) {
+                exp = new FuncNode(pFuncCallback, pFunctionContext, token, argcounter, funcargs);
+            } else {
+                printf("[!] Error: No functional callback assigned\n");
+            }
+        } else {
+            printf("[!] Error: Unterminated function call: %s\n", token);
+        }
+    } else {
+        // variable
+        if (pVariableCallback != nullptr) {
+            exp = new ConstUserNode(pVariableCallback, pVariableContext, token);
+        } else {
+            printf("[!] Error: No variable callback defined, token=%s\n", token);
+        }
+    }
+    return exp;
+}
+
+//
+// build constant factors and sub-expressions
+//
+BaseNode *ExpSolver::BuildSubExpr() {
+    BaseNode *exp = nullptr;
+    if (!tokenizer->HasMore()) {
+        return nullptr;
+    }
+
+    kTokenClass tc = kTokenClass_Unknown;
+    const char *token = tokenizer->Peek();
+
+    // classify next
+    if (token[0] == '(')    // Start of new expression, ok, build tree..
+    {
+        // Swallow peek...
+        tokenizer->Next();
+
+        exp = BuildTree();
+
+        token = tokenizer->Peek();
+        // Check if expression was properly terminated
+        if (strcmp(token, ")")) {
+            // error
+            printf("[!] Error: Missing right parenthesis\n");
+            return nullptr;
+        }
+        tokenizer->Next();
+    } else if (token[0] == ')') {
+        // empty expression
+        return nullptr;
+    } else if ((tc = ClassifyToken(token)) != kTokenClass_Unknown) {
+        // Token was not a sub-expression, check if a number or something user-defined
+        switch (tc) {
+            case kTokenClass_Numeric : {
+                bool negative = false;
+                token = tokenizer->Next();
+                //printf("Numeric, next: %s\n", token);
+                // Ugly - but I want to avoid string concat
+                // will not handle multiple '--'
+                if (token[0] == '-') {
+                    // negative numeric token
+                    token = tokenizer->Next();
+                    negative = true;
+
+                }
+                // build constant node, this is a leaf
+                exp = new ConstNode(token, negative);
+            }
+            break;
+            case kTokenClass_Variable :
+                exp = BuildUserCall();
+                break;
+            default:
+                printf("[!] Error: Unknown token class: '%s'\n", token);
+                return nullptr;
+        }
+    } else {
+        printf("[!] Error: Unexpected token: %s\n", token);
+    }
+    return exp;
+}
+
+//
+// Builds * and /
+//
+BaseNode *ExpSolver::BuildMulDiv() {
+    BaseNode *exp;
+
+    exp = BuildSubExpr();    // build
+
+    if (tokenizer->HasMore()) {
+        const char *token = tokenizer->Peek();
+        //while(Tokenizer::Case(token,"* /") >= 0)
+        while ((token != nullptr) && ((token[0] == '*') || (token[0] == '/'))) {
+            //printf("term\n");
+            token = tokenizer->Next();
+            BaseNode *next = BuildSubExpr();
+            exp = new BinOpNode(token, exp, next);
+            token = tokenizer->Peek();
+        }
+    }
+    return exp;
+}
+
+//
+// Builds +/- nodes
+//
+BaseNode *ExpSolver::BuildAddSub() {
+    BaseNode *exp;
+    exp = BuildMulDiv();
+    if (tokenizer->HasMore()) {
+        const char *token = tokenizer->Peek();
+        while ((token != nullptr) && ((token[0] == '+') || (token[0] == '-'))) {
+            token = tokenizer->Next();
+            BaseNode *nextTerm = BuildMulDiv();
+            exp = new BinOpNode(token, exp, nextTerm);
+            token = tokenizer->Peek();
+        }
+    }
+    return exp;
 }
 
 
+//
+// Build shift ('<<' or '>>') nodes
+//
+BaseNode *ExpSolver::BuildShift() {
+    BaseNode *exp;
+    exp = BuildAddSub();
+    if (tokenizer->HasMore()) {
+        const char *token = tokenizer->Peek();
+        while ((token != nullptr) && (Tokenizer::Case(token, "<< >>") != -1)) {
+            token = tokenizer->Next();
+            BaseNode *nextAddSub = BuildAddSub();
+            exp = new BinOpNode(token, exp, nextAddSub);
+            token = tokenizer->Peek();
+        }
+    }
+    return exp;
+}
+
+
+BaseNode *ExpSolver::BuildBool() {
+    BaseNode *exp;
+    exp = BuildShift();
+    if (tokenizer->HasMore()) {
+        const char *token = tokenizer->Peek();
+        //printf("BuildBool, token=%s",token);
+        while ((token != nullptr) && ((token[0] == '>') || (token[0] == '<'))) {
+            token = tokenizer->Next();
+            //printf("BuildBool, Next as BuildBase\n");
+            BaseNode *nextBase = BuildShift();
+            exp = new BoolOpNode(token, exp, nextBase);
+            token = tokenizer->Peek();
+            //printf("BuildBool, done, next token=%s\n",token);
+        }
+    } else {
+        //printf("BuildBool, no more data\n");
+    }
+    return exp;
+}
+
+BaseNode *ExpSolver::BuildIf() {
+    BaseNode *exp;
+    exp = BuildBool();
+    if (tokenizer->HasMore()) {
+        const char *token = tokenizer->Peek();
+        //printf("BuildIf, HasMore, token=%s\n",token);
+        while ((token != nullptr) && (token[0] == '?')) {
+            token = tokenizer->Next();
+            //printf("BuildIf, build true\n");
+            BaseNode *pTrue = BuildTree();
+            if (pTrue == nullptr) {
+                printf("[!] Error: Operator mismatch, use <exp>?<true>:<false>\n");
+                return nullptr;
+            }
+
+            token = tokenizer->Peek();
+            if ((token == nullptr) || (token[0] != ':')) {
+                printf("[!] Error: token error, expected ':' got '%s'\n", token);
+                return nullptr;
+            }
+            token = tokenizer->Next();
+            BaseNode *pFalse = BuildTree();
+            exp = new IfOperatorNode(exp, pTrue, pFalse);
+
+            token = tokenizer->Peek();
+        }
+    } else {
+        //printf("BuildIf, no more data\n");
+    }
+    //printf("BuildIf, done, exp=%p\n", exp);
+    return exp;
+}
+
+BaseNode *ExpSolver::BuildTree() {
+    BaseNode *exp = BuildIf();
+    return exp;
+}
+
+// boolean stuff here
+//
+// Prepare the expression = build the expression tree
+//
+bool ExpSolver::Prepare() {
+    if (tree != nullptr) {
+        delete tree;
+        tree = nullptr;
+    }
+    // This allows for multi-expression and is the basis for a proper interpreter
+    while (tokenizer->HasMore()) {
+        BaseNode *exp = BuildTree();
+        // However, let's fail if there is some kind of error
+        if (exp == nullptr) {
+            return false;
+        }
+        nodes.push_back(exp);
+    }
+    // Store tree for first node..
+    tree = nodes[0];
+    return true;
+}
+
+//
+// Evaluate a prepared expression
+//
+double ExpSolver::Evaluate() {
+    double result = 0.0;
+    //printf("Nodes: %d\n", nodes.size());
+    if (tree != nullptr) {
+        result = tree->Evaluate();
+    }
+    return result;
+}
+
+//
+// Node types...
+//
 
 ConstNode::ConstNode(const char *input, bool negative) {
     if ((input[0] == '$') || (input[0] == 'x')) {
@@ -235,335 +548,31 @@ double IfOperatorNode::Evaluate() {
     return pFalse->Evaluate();
 }
 
-//
-// constructor
-//
-ExpSolver::ExpSolver(const char *expression) {
-    //this->expression = strdup(expression);
-    tokenizer = new Tokenizer(expression, "<< >> * / + - ( ) , < > ? :");
-    pVariableCallback = nullptr;
-    pFuncCallback = nullptr;
-    tree = nullptr;
-}
 
-bool ExpSolver::Solve(double *out, const char *expression) {
-    ExpSolver solver(expression);
-    if (!solver.Prepare()) return false;
-    *out = solver.Evaluate();
-    return true;
-}
-
-ExpSolver::~ExpSolver() {
-    delete tokenizer;
-    if (tree != nullptr) {
-        delete tree;
+static unsigned long long hex2dec_c(const char *s) {
+    unsigned long long n = 0;
+    int length = strlen(s);
+    for (int i = 0; i < length && s[i] != '\0'; i++) {
+        int v = 0;
+        if ('a' <= s[i] && s[i] <= 'f') { v = s[i] - 97 + 10; }
+        else if ('A' <= s[i] && s[i] <= 'F') { v = s[i] - 65 + 10; }
+        else if ('0' <= s[i] && s[i] <= '9') { v = s[i] - 48; }
+        else break;
+        n *= 16;
+        n += v;
     }
+    return n;
 }
 
-//
-// registration of variable handling
-//
-void ExpSolver::RegisterUserVariableCallback(PFNEVALUATE pFunc, void *pUser) {
-    pVariableCallback = pFunc;
-    pVariableContext = pUser;
+static unsigned long bin2dec(const char *binary) {
+    int len, i, exp;
+    unsigned long dec = 0;
+
+    len = strlen(binary);
+    exp = len - 1;
+
+    for (i = 0; i < len; i++, exp--)
+        dec += binary[i] == '1' ? pow(2, exp) : 0;
+    return dec;
 }
 
-//
-// registration of function callback's
-//
-void ExpSolver::RegisterUserFunctionCallback(PFNEVALUATEFUNC pFunc, void *pUser) {
-    pFuncCallback = pFunc;
-    pFunctionContext = pUser;
-}
-
-//
-// determines if a char is a numerical token or not
-//
-static bool IsNumeric(char c) {
-    static const char *num = "-0123456789%$x";
-    if (!strchr(num, c)) return false;
-    return true;
-}
-
-//
-// Classification of a token when building factors
-//
-ExpSolver::kTokenClass ExpSolver::ClassifyToken(const char *token) {
-    kTokenClass result = kTokenClass_Unknown;
-    if (IsNumeric(token[0])) {
-        result = kTokenClass_Numeric;
-    } else {
-        result = kTokenClass_Variable;
-    }
-    return result;
-}
-
-//
-// user function calls and variables
-//
-BaseNode *ExpSolver::BuildUserCall() {
-    BaseNode *exp = nullptr;
-    BaseNode *arg = nullptr;
-    int argcounter = 0;
-    BaseNode *funcargs[EXP_SOLVER_MAX_ARGS];
-
-
-    const char *token = tokenizer->Next();
-
-    const char *next = tokenizer->Peek();
-    if ((next != nullptr) && (next[0] == '(')) {
-        next = tokenizer->Next();
-
-        // Assume arguments to function call..
-        arg = BuildTree();
-
-        // nullptr == Empty expression - i.e. no parameters to function call
-        if (arg != nullptr) {
-            funcargs[argcounter++] = arg;
-        }
-        next = tokenizer->Peek();
-
-        // Parse additional arguments
-        while (next[0] == ',') {
-            tokenizer->Next();
-            arg = BuildTree();
-            funcargs[argcounter++] = arg;
-            next = tokenizer->Peek();
-        }
-
-        if (next[0] == ')') {
-            tokenizer->Next();
-            if (pFuncCallback != nullptr) {
-                exp = new FuncNode(pFuncCallback, pFunctionContext, token, argcounter, funcargs);
-            } else {
-                printf("[!] Error: No functional callback assigned\n");
-            }
-        } else {
-            printf("[!] Error: Unterminated function call: %s\n", token);
-        }
-    } else {
-        // variable
-        if (pVariableCallback != nullptr) {
-            exp = new ConstUserNode(pVariableCallback, pVariableContext, token);
-        } else {
-            printf("[!] Error: No variable callback defined, token=%s\n", token);
-        }
-    }
-    return exp;
-}
-
-//
-// build constant factors and sub-expressions
-//
-BaseNode *ExpSolver::BuildFact() {
-    BaseNode *exp = nullptr;
-    if (!tokenizer->HasMore()) {
-        return nullptr;
-    }
-
-    kTokenClass tc = kTokenClass_Unknown;
-    const char *token = tokenizer->Peek();
-
-    // classify next
-    if (token[0] == '(')    // Start of new expression, ok, build tree..
-    {
-        // Swallow peek...
-        tokenizer->Next();
-
-        exp = BuildTree();
-
-        token = tokenizer->Peek();
-        // Check if expression where terminated
-        if (strcmp(token, ")")) {
-            // error
-            printf("[!] Error: Missing right parenthesis\n");
-            return nullptr;
-        }
-        tokenizer->Next();
-    } else if (token[0] == ')')    // empty expression
-    {
-        return nullptr;
-    } else if ((tc = ClassifyToken(token)) != kTokenClass_Unknown) {
-        switch (tc) {
-            case kTokenClass_Numeric : {
-                bool negative = false;
-                token = tokenizer->Next();
-                //printf("Numeric, next: %s\n", token);
-                // Ugly - but I want to avoid string concat
-                // will not handle multiple '--'
-                if (token[0] == '-') {
-                    // negative numeric token
-                    token = tokenizer->Next();
-                    negative = true;
-
-                }
-                exp = new ConstNode(token, negative);
-
-            }
-            break;
-            case kTokenClass_Variable :
-                exp = BuildUserCall();
-                break;
-            default:
-                printf("[!] Error: Unknown token class: '%s'\n", token);
-                return nullptr;
-        }
-    } else {
-        printf("[!] Error: Unexpected token: %s\n", token);
-    }
-    return exp;
-}
-
-//
-// builds high priority operators
-//
-BaseNode *ExpSolver::BuildTerm() {
-    BaseNode *exp;
-
-    exp = BuildFact();    // build factory
-
-    if (tokenizer->HasMore()) {
-        const char *token = tokenizer->Peek();
-        //while(Tokenizer::Case(token,"* /") >= 0)
-        while ((token != nullptr) && ((token[0] == '*') || (token[0] == '/'))) {
-            //printf("term\n");
-            token = tokenizer->Next();
-            BaseNode *next = BuildFact();
-            exp = new BinOpNode(token, exp, next);
-            token = tokenizer->Peek();
-        }
-    }
-    return exp;
-}
-
-//
-// internal, builds the expression tree
-// handles low priority operators - also called internally
-//
-BaseNode *ExpSolver::BuildAddSub() {
-    BaseNode *exp;
-    exp = BuildTerm();
-    if (tokenizer->HasMore()) {
-        const char *token = tokenizer->Peek();
-        while ((token != nullptr) && ((token[0] == '+') || (token[0] == '-'))) {
-            token = tokenizer->Next();
-            BaseNode *nextTerm = BuildTerm();
-            exp = new BinOpNode(token, exp, nextTerm);
-            token = tokenizer->Peek();
-        }
-    }
-    return exp;
-}
-
-
-//
-// Build shift ('<<' or '>>') nodes
-//
-BaseNode *ExpSolver::BuildShift() {
-    BaseNode *exp;
-    exp = BuildAddSub();
-    if (tokenizer->HasMore()) {
-        const char *token = tokenizer->Peek();
-        while ((token != nullptr) && (Tokenizer::Case(token, "<< >>") != -1)) {
-            token = tokenizer->Next();
-            BaseNode *nextAddSub = BuildAddSub();
-            exp = new BinOpNode(token, exp, nextAddSub);
-            token = tokenizer->Peek();
-        }
-    }
-    return exp;
-}
-
-
-BaseNode *ExpSolver::BuildBool() {
-    BaseNode *exp;
-    exp = BuildShift();
-    if (tokenizer->HasMore()) {
-        const char *token = tokenizer->Peek();
-        //printf("BuildBool, token=%s",token);
-        while ((token != nullptr) && ((token[0] == '>') || (token[0] == '<'))) {
-            token = tokenizer->Next();
-            //printf("BuildBool, Next as BuildBase\n");
-            BaseNode *nextBase = BuildShift();
-            exp = new BoolOpNode(token, exp, nextBase);
-            token = tokenizer->Peek();
-            //printf("BuildBool, done, next token=%s\n",token);
-        }
-    } else {
-        //printf("BuildBool, no more data\n");
-    }
-    return exp;
-}
-
-BaseNode *ExpSolver::BuildIf() {
-    BaseNode *exp;
-    exp = BuildBool();
-    if (tokenizer->HasMore()) {
-        const char *token = tokenizer->Peek();
-        //printf("BuildIf, HasMore, token=%s\n",token);
-        while ((token != nullptr) && (token[0] == '?')) {
-            token = tokenizer->Next();
-            //printf("BuildIf, build true\n");
-            BaseNode *pTrue = BuildTree();
-            if (pTrue == nullptr) {
-                printf("[!] Error: Operator mismatch, use <exp>?<true>:<false>\n");
-                return nullptr;
-            }
-
-            token = tokenizer->Peek();
-            if ((token == nullptr) || (token[0] != ':')) {
-                printf("[!] Error: token error, expected ':' got '%s'\n", token);
-                return nullptr;
-            }
-            token = tokenizer->Next();
-            BaseNode *pFalse = BuildTree();
-            exp = new IfOperatorNode(exp, pTrue, pFalse);
-
-            token = tokenizer->Peek();
-        }
-    } else {
-        //printf("BuildIf, no more data\n");
-    }
-    //printf("BuildIf, done, exp=%p\n", exp);
-    return exp;
-}
-
-BaseNode *ExpSolver::BuildTree() {
-    BaseNode *exp = BuildIf();
-    return exp;
-}
-
-// boolean stuff here
-//
-// Prepare the expression = build the expression tree
-//
-bool ExpSolver::Prepare() {
-    if (tree != nullptr) {
-        delete tree;
-        tree = nullptr;
-    }
-    // This allows for multi-expression and is the basis for a proper interpreter
-    while (tokenizer->HasMore()) {
-        BaseNode *exp = BuildTree();
-        // However, let's fail if there is some kind of error
-        if (exp == nullptr) {
-            return false;
-        }
-        nodes.push_back(exp);
-    }
-    // Store tree for first node..
-    tree = nodes[0];
-    return true;
-}
-
-//
-// Evaluate a prepared expression
-//
-double ExpSolver::Evaluate() {
-    double result = 0.0;
-    //printf("Nodes: %d\n", nodes.size());
-    if (tree != nullptr) {
-        result = tree->Evaluate();
-    }
-    return result;
-}
