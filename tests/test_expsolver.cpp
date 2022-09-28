@@ -14,6 +14,9 @@ extern "C" {
     int test_expsolver_simple(ITesting *t);
     int test_expsolver_lshift(ITesting *t);
     int test_expsolver_rshift(ITesting *t);
+    int test_expsolver_hex(ITesting *t);
+    int test_expsolver_bin(ITesting *t);
+
 }
 
 
@@ -161,6 +164,40 @@ int test_expsolver_rshift(ITesting *t) {
     TR_ASSERT(t, tmp==2);
     return kTR_Pass;
 }
+
+int test_expsolver_hex(ITesting *t) {
+    double tmp;
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "$8"));
+    TR_ASSERT(t, 8 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "$10"));
+    TR_ASSERT(t, 16 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "0x10"));
+    TR_ASSERT(t, 16 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "0x80"));
+    TR_ASSERT(t, 128 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "0x80 + 10"));
+    TR_ASSERT(t, 138 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "10 + 0x80"));
+    TR_ASSERT(t, 138 == (int)tmp);
+    return kTR_Pass;
+}
+
+int test_expsolver_bin(ITesting *t) {
+    double tmp;
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "%1"));
+    TR_ASSERT(t, 1 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "%10"));
+    TR_ASSERT(t, 2 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "%1111"));
+    TR_ASSERT(t, 15 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "%11111111"));
+    TR_ASSERT(t, 255 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "10 + %1111"));
+    TR_ASSERT(t, 25 == (int)tmp);
+    TR_ASSERT(t, ExpSolver::Solve(&tmp, "%1111 + 10"));
+    TR_ASSERT(t, 25 == (int)tmp);
+}
+
 
 // static void testExpSolver() {
 
